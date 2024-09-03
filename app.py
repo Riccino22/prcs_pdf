@@ -3,10 +3,15 @@ from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.vectorstores import FAISS
-from langchain.embeddings import HuggingFaceInstructEmbeddings
+from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
 from langchain.memory import ConversationBufferMemory
+
 #from langchain.chains.conversational_retrieval.nase
 from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
+from langchain_community.chat_models.openai import ChatOpenAI
+from langchain_groq import ChatGroq
+from langchain_community.llms.huggingface_hub import HuggingFaceHub
+from html_template import css, bot_template, user_template
 load_dotenv()
 
 def get_pdf_text(pdf_docs):
@@ -33,17 +38,40 @@ def get_vectorstore(text_chunks):
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     return vectorstore
     
-def get_conversation_chain(vectorestorw):
-        memory = ConversationBufferMemory(model_name="chat_history", return_messages=True)
+def get_conversation_chain(vectorestore):
+        #llm = ChatGroq()
+        llm = ChatGroq()
+        memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
         conversation_chain = ConversationalRetrievalChain.from_llm(
-            
+            llm=llm,
+            retriever=vectorestore.as_retriever(),
+            memory=memory
         )
+        return conversation_chain
+
+def handle_userinput(user_question):
+    response = st.session_state.conversation({'question': user_question})
+    st.session_state.chat_history = response['chat_history']
+    st.write(response)
 
 def main():
     st.set_page_config(page_title="Chat with a PDF", page_icon=":books:")
     
+    st.write(css, unsafe_allow_html=True)
+    
+    if "conversation" not in st.session_state:
+        st.session_state.conversation = None
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = None
+    
+    
     st.header("Chat with a multples PDFs :books:")
-    st.text_input("Ask a question about your documents")
+    user_input = st.text_input("Ask a question about your documents")
+    
+    st.write(user_template.replace("{{MSG}}", "Hello robot"), unsafe_allow_html=True)
+    st.write(bot_template.replace("{{MSG}}", "Hello human"), unsafe_allow_html=True)
+    if user_input:
+        handle_userinput(user_input)
     
     with st.sidebar:
         st.subheader("Your document")
@@ -59,8 +87,10 @@ def main():
                 
                 vectorstore = get_vectorstore(text_chunks)
                 
-                conversation = get_conversation_chain(vectorstore)
+                st.session_state.conversation = get_conversation_chain(vectorstore)
 
 
+                
+    st.session_state.conversation 
 if __name__ == "__main__":
     main()
