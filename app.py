@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.vectorstores import FAISS
+from langchain_pinecone import PineconeVectorStore
 from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
 from langchain.memory import ConversationBufferMemory
 
@@ -12,6 +13,8 @@ from langchain_community.chat_models.openai import ChatOpenAI
 from langchain_groq import ChatGroq
 from langchain_community.llms.huggingface_hub import HuggingFaceHub
 from html_template import css, bot_template, user_template
+from pinecone import Pinecone
+import os
 load_dotenv()
 
 def get_pdf_text(pdf_docs):
@@ -37,10 +40,18 @@ def get_vectorstore(text_chunks):
     embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl")
     vectorstore = FAISS.from_texts(texts=text_chunks, embedding=embeddings)
     return vectorstore
-    
+
+def get_vectorestore_pinecone(text_chunks):
+    embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl")
+    pc = Pinecone(api_key=os.environ.get('PINECONE_TOKEN'))
+    index = pc.Index('langchain')
+    vectorstore = PineconeVectorStore(embedding=embeddings, index=index)
+    vectorstore.add_texts(texts=text_chunks)
+    return vectorstore
+
 def get_conversation_chain(vectorestore):
         #llm = ChatGroq()
-        llm = ChatGroq()
+        llm = ChatGroq(model='Llama3-8b-8192')
         memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
         conversation_chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
@@ -85,7 +96,7 @@ def main():
                 text_chunks = get_text_chunks(raw_text)
                 st.write(text_chunks)
                 
-                vectorstore = get_vectorstore(text_chunks)
+                vectorstore = get_vectorestore_pinecone(text_chunks)
                 
                 st.session_state.conversation = get_conversation_chain(vectorstore)
 
